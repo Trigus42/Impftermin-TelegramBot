@@ -131,7 +131,7 @@ def set_zip_code(update, context):
 # Fetch current state of the vaccination center and send detailed info to user
 def status_update(update, context):
     chat = update.effective_chat.id
-    if chat in chats:
+    if chat in chats and chats[chat]["zip_code"]:
         if "mine" in context.args:
             result = get_info(chats[chat]["zip_code"], chats[chat]["birthdate"])
             message = f'Impfzentrum: {result["resultList"][0]["name"]}\nImpfstoff: {result["resultList"][0]["vaccineName"]} ({result["resultList"][0]["vaccineType"]})\nImpftermin verfügbar (für mich): {"Ja" if (not result["resultList"][0]["outOfStock"] and check_vaccine(chat, result["resultList"][0]["vaccineName"])) else "Nein"}'
