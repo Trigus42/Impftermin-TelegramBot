@@ -5,7 +5,7 @@ import datetime
 import concurrent.futures
 import sys
 import telegram.constants
-from time import sleep, time
+import time
 from random import randint
 from telegram.ext import Updater
 from telegram.ext import CommandHandler
@@ -41,7 +41,7 @@ def init_chat(chat):
 def update_vaccines(interval):
     global vaccines
     while(True):
-        sleep(interval)
+        time.sleep(interval)
         vaccines = get_vaccines()
 
 # Vaccine list
@@ -205,7 +205,7 @@ def vaccine_info(update, context):
 
     if chat in chats:
         for vaccine in vaccines.keys():
-            message += f"{vaccine}: {'Ausgeschlossen' if not check_vaccine_not_excluded(chat, vaccine) else ('Ab '+ str(vaccines[vaccine]['min_age']) + ' Jahren') if not check_vaccine(chat, vaccine) else 'Überwacht'}\n"
+            message += f"{vaccine}: {'Ausgeschlossen' if not check_vaccine_not_excluded(chat, vaccine) else ('Ab '+ str(vaccines[vaccine]['min_age']) + ' Jahren') if not check_vaccine_age_match(chat, vaccine) else 'Überwacht'}\n"
     else:
         for vaccine in vaccines.keys():
             message += f"{vaccine}\n"
@@ -217,6 +217,7 @@ def vaccine_info(update, context):
 
 # Create a process monitoring the state of the vaccination center
 def deploy_agent(zip_code, interval=1):
+    print(zip_code, [chat for chat in chats if chats[chat]["zip_code"] == zip_code])
     while(True):
         try:
             result = get_info(zip_code)
@@ -225,9 +226,9 @@ def deploy_agent(zip_code, interval=1):
                 for chat in [chat for chat in chats if chats[chat]["zip_code"] == zip_code]:
                     executor.submit(analyze_result, result, chat)
             # substract time taken from sleep interval
-            sleep(interval-period) if (period := time.time()-time0) < interval else None
+            time.sleep(interval-period) if (period := time.time()-time0) < interval else None
         except Exception as e:
-            print("Exception of agent:", e, "\n Chat info:", chats[chat])
+            print("Exception of agent:", e)
 
 def analyze_result(result, chat):
     if not result["resultList"][0]["outOfStock"] and not chats[chat]["available"] and check_vaccine(chat, result["resultList"][0]["vaccineName"]):
@@ -249,7 +250,7 @@ def check_vaccine(chat, vaccine):
 def check_vaccine_age_match(chat, vaccine):
     if "birthdate" in chats[chat]:
         birthdate = [int(i) for i in datetime.datetime.fromtimestamp(chats[chat]["birthdate"]).strftime('%d.%m.%Y').split(".")]
-        date = [int(i) for i in datetime.datetime.fromtimestamp(time()).strftime('%d.%m.%Y').split(".")]
+        date = [int(i) for i in datetime.datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y').split(".")]
         age = {"years": date[2]-birthdate[2], "months": date[1]-birthdate[1], "days": date[0]-birthdate[0]}
         if age["years"] > vaccines[vaccine]["min_age"]:
             return True
