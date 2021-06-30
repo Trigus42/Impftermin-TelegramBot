@@ -32,7 +32,7 @@ def get_info(zip_code, birthdate=None):
 
 # Set varibales and start monitoring
 def init_chat(chat):
-    chats[chat]["available"] = False
+    available[chat] = False
 
     if chats[chat]["zip_code"] not in monitoring:
         monitoring.append(chats[chat]["zip_code"])
@@ -132,12 +132,9 @@ def set_zip_code(update, context):
 def status_update(update, context):
     chat = update.effective_chat.id
     if chat in chats and chats[chat]["zip_code"]:
-        if "mine" in context.args:
-            result = get_info(chats[chat]["zip_code"], chats[chat]["birthdate"])
-            message = f'Impfzentrum: {result["resultList"][0]["name"]}\nImpfstoff: {result["resultList"][0]["vaccineName"]} ({result["resultList"][0]["vaccineType"]})\nImpftermin verfügbar (für mich): {"Ja" if (not result["resultList"][0]["outOfStock"] and check_vaccine(chat, result["resultList"][0]["vaccineName"])) else "Nein"}'
-        else:
-            result = get_info(chats[chat]["zip_code"])
-            message = f'Impfzentrum: {result["resultList"][0]["name"]}\nImpfstoff: {result["resultList"][0]["vaccineName"]} ({result["resultList"][0]["vaccineType"]})\nImpftermin verfügbar (allgemein): {"Nein" if result["resultList"][0]["outOfStock"] else "Ja"}'
+        result = get_info(chats[chat]["zip_code"])
+        message = f'Impfzentrum: {result["resultList"][0]["name"]}\nImpfstoff: {result["resultList"][0]["vaccineName"]} ({result["resultList"][0]["vaccineType"]})\n'
+        message += f'Freie Impftermine (alle): {result["resultList"][0]["freeSlotSizeOnline"] if not result["resultList"][0]["outOfStock"] else "0"}'
         context.bot.send_message(chat_id=chat, text=message)
     else:
         context.bot.send_message(chat_id=chat, text="Lege bitte zuerst deine Postleitzahl fest.")
@@ -217,7 +214,7 @@ def vaccine_info(update, context):
 
 # Create a process monitoring the state of the vaccination center
 def deploy_agent(zip_code, interval=1):
-    print(zip_code, [chat for chat in chats if chats[chat]["zip_code"] == zip_code])
+    print(zip_code, "- Chats (on initialization):", [chat for chat in chats if chats[chat]["zip_code"] == zip_code])
     while(True):
         try:
             result = get_info(zip_code)
@@ -231,13 +228,14 @@ def deploy_agent(zip_code, interval=1):
             print("Exception of agent:", e)
 
 def analyze_result(result, chat):
-    if not result["resultList"][0]["outOfStock"] and not chats[chat]["available"] and check_vaccine(chat, result["resultList"][0]["vaccineName"]):
+    if (not result["resultList"][0]["outOfStock"]) and (not available[chat]) and check_vaccine(chat, result["resultList"][0]["vaccineName"]):
         updater.bot.send_message(chat_id=chat, text="[Freier Impftermin gefunden!](https://www.impfportal-niedersachsen.de/)", parse_mode=telegram.constants.PARSEMODE_MARKDOWN)
-        updater.bot.send_message(chat_id=chat, text=f"Insgesamt {result['resultList'][0]['freeSlotSizeOnline']} {'Termin' if result['resultList'][0]['freeSlotSizeOnline'] == 1 else 'Termine'} offen.")
-        chats[chat]["available"] = True
-    elif chats[chat]["available"] and (result["resultList"][0]["outOfStock"] or not check_vaccine(chat, result["resultList"][0]["vaccineName"])):
+        # Can't differentiate between vaccines here
+        # updater.bot.send_message(chat_id=chat, text=f"Insgesamt {result['resultList'][0]['freeSlotSizeOnline']} {'Termin' if result['resultList'][0]['freeSlotSizeOnline'] == 1 else 'Termine'} offen.")
+        available[chat] = True
+    elif available[chat] and (result["resultList"][0]["outOfStock"] or not check_vaccine(chat, result["resultList"][0]["vaccineName"])):
         updater.bot.send_message(chat_id=chat, text="Kein Impftermin mehr frei.")
-        chats[chat]["available"] = False
+        available[chat] = False
 
 def check_vaccine(chat, vaccine):
     ret = check_vaccine_not_excluded(chat, vaccine)
@@ -306,6 +304,10 @@ if __name__ == "__main__":
     dispatcher.add_handler(CommandHandler('vaccines', vaccine_info, run_async = True))
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
+        available = {}
+        for chat in chats:
+            available[chat] = False
+
         # Resume monitoring processes
         monitoring = []
         # Set comprehension because each zip code should only have one agent
