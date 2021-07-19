@@ -228,12 +228,16 @@ def deploy_agent(zip_code, interval=1):
             print("Exception of agent:", e)
 
 def analyze_result(result, chat):
-    if (not result["resultList"][0]["outOfStock"]) and (not available[chat]) and check_vaccine(chat, result["resultList"][0]["vaccineName"]):
-        updater.bot.send_message(chat_id=chat, text="[Freier Impftermin gefunden!](https://www.impfportal-niedersachsen.de/)", parse_mode=telegram.constants.PARSEMODE_MARKDOWN)
-        # Can't differentiate between vaccines here
-        # updater.bot.send_message(chat_id=chat, text=f"Insgesamt {result['resultList'][0]['freeSlotSizeOnline']} {'Termin' if result['resultList'][0]['freeSlotSizeOnline'] == 1 else 'Termine'} offen.")
-        available[chat] = True
-    elif available[chat] and (result["resultList"][0]["outOfStock"] or not check_vaccine(chat, result["resultList"][0]["vaccineName"])):
+    for i in range(len(result["resultList"])):
+        if not result["resultList"][i]["outOfStock"] and check_vaccine(chat, result["resultList"][i]["vaccineName"]):
+            if not available[chat]:
+                updater.bot.send_message(chat_id=chat, text="[Freier Impftermin gefunden!](https://www.impfportal-niedersachsen.de/)", parse_mode=telegram.constants.PARSEMODE_MARKDOWN)
+                available[chat] = True
+                return 0
+            else:
+                return 0
+        
+    if available[chat]:
         updater.bot.send_message(chat_id=chat, text="Kein Impftermin mehr frei.")
         available[chat] = False
 
@@ -272,6 +276,7 @@ def check_vaccine_not_excluded(chat, vaccine_name):
 ## Main program
 
 if __name__ == "__main__":
+    # Debug
     telegram_bot_token = ""
 
     if len(sys.argv) > 1:
@@ -304,9 +309,7 @@ if __name__ == "__main__":
     dispatcher.add_handler(CommandHandler('vaccines', vaccine_info, run_async = True))
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        available = {}
-        for chat in chats:
-            available[chat] = False
+        available = {chat: False for chat in chats}
 
         # Resume monitoring processes
         monitoring = []
